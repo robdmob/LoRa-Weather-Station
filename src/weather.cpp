@@ -1,3 +1,5 @@
+#include <Arduino.h>
+
 #include <RTCZero.h>
 #include <SPI.h>
 #include <Wire.h>
@@ -31,6 +33,30 @@ uint8_t currSample = 0;
 volatile uint16_t windClicks = 0;
 volatile uint16_t rainClicks = 0;
 volatile uint8_t alarmSecs = 0;
+
+uint8_t get_wind_direction() {
+
+    uint16_t adc = analogRead(WDIR_PIN);
+    
+    if (adc < 380) return (5);
+    if (adc < 397) return (3);
+    if (adc < 414) return (4);
+    if (adc < 456) return (7);
+    if (adc < 508) return (6);
+    if (adc < 551) return (9);
+    if (adc < 615) return (8);
+    if (adc < 680) return (1);
+    if (adc < 746) return (2);
+    if (adc < 801) return (11);
+    if (adc < 833) return (10);
+    if (adc < 878) return (15);
+    if (adc < 913) return (0);
+    if (adc < 940) return (13);
+    if (adc < 967) return (14);
+    //if (adc < 990) return (12);
+    return (12);
+    
+}
 
 void rainIRQ() {  
   rainClicks++;
@@ -166,26 +192,3 @@ void loop() {
   
 }
 
-uint8_t get_wind_direction() {
-
-    uint16_t adc = analogRead(WDIR_PIN);
-    
-    if (adc < 380) return (5);
-    if (adc < 397) return (3);
-    if (adc < 414) return (4);
-    if (adc < 456) return (7);
-    if (adc < 508) return (6);
-    if (adc < 551) return (9);
-    if (adc < 615) return (8);
-    if (adc < 680) return (1);
-    if (adc < 746) return (2);
-    if (adc < 801) return (11);
-    if (adc < 833) return (10);
-    if (adc < 878) return (15);
-    if (adc < 913) return (0);
-    if (adc < 940) return (13);
-    if (adc < 967) return (14);
-    //if (adc < 990) return (12);
-    return (12);
-    
-}
