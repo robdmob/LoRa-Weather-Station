@@ -1,5 +1,3 @@
-#include <Arduino.h>
-
 #include <RTCZero.h>
 #include <SPI.h>
 #include <Wire.h>
