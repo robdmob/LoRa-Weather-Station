@@ -6,17 +6,33 @@
 #include <Adafruit_Sensor.h>
 #include <Adafruit_BME280.h>
 
+#define DEBUG 0
+
 #define RAIN_PIN 5
+
 #define WSPEED_PIN 6
 #define WDIR_PIN A0
 
-#define SAMPLE_INTERVAL 5
-#define TRANSMIT_INTERVAL 300
+#define SCTRL_PIN 10
+#define SVOLT_PIN A1
+#define SRESISTOR 5 + 2 // OHMS
+#define SSIZE 0.005 // M^2
 
-#define NUM_SAMPLES TRANSMIT_INTERVAL / SAMPLE_INTERVAL
+#if DEBUG == 1
+  #define SAMPLE_INTERVAL 5
+  #define TRANSMIT_INTERVAL 5
+#else
+  #define SAMPLE_INTERVAL 5
+  #define TRANSMIT_INTERVAL 300
+#endif
+
+#define NUM_SAMPLES (TRANSMIT_INTERVAL / SAMPLE_INTERVAL)
 
 #define WIND_MULTIPLIER 1.492   // MPH
 #define RAIN_MULTIPLIER 0.2794  // MM
+//#define SOLAR_MULTIPLIER 3.3 / 1024 // VOLTS
+#define SOLAR_MULTIPLIER 3300.0 / 1024 // MILLIVOLTS
+//#define SOLAR_MULTIPLIER 3.3 / 1024 // VOLTS
 
 RTCZero rtc;
 
@@ -24,6 +40,8 @@ Adafruit_BME280 bme;
 
 uint16_t windSpeeds[NUM_SAMPLES];
 uint8_t windDirs[NUM_SAMPLES];
+
+uint16_t solarIntensities[NUM_SAMPLES];
 
 volatile bool sample = false;
 uint8_t currSample = 0;
@@ -77,6 +95,9 @@ void setup() {
   
   pinMode(LED_BUILTIN, OUTPUT);
   digitalWrite(LED_BUILTIN, LOW);
+
+  pinMode(SCTRL_PIN, OUTPUT);
+  digitalWrite(SCTRL_PIN, LOW);
   
   pinMode(RAIN_PIN, INPUT_PULLUP);
   pinMode(WSPEED_PIN, INPUT_PULLUP);
@@ -111,6 +132,11 @@ void loop() {
     windClicks = 0;
     
     windDirs[currSample] = get_wind_direction();
+
+    digitalWrite(SCTRL_PIN, HIGH);
+    delayMicroseconds(50);
+    solarIntensities[currSample] = analogRead(SVOLT_PIN);
+    digitalWrite(SCTRL_PIN, LOW);
     
     currSample++;
 
@@ -123,6 +149,7 @@ void loop() {
 
       uint16_t windSpeed = windSpeeds[0];
       uint16_t windGust = windSpeeds[0];
+      uint16_t solarIntensity = solarIntensities[0];
 
       for (uint8_t i = 1; i < NUM_SAMPLES; i++) {
 
@@ -138,7 +165,8 @@ void loop() {
         windDir += D;
 
         if (windSpeeds[i] > windGust) windGust = windSpeeds[i];
-        windSpeed += windSpeeds[i];          
+        windSpeed += windSpeeds[i];
+        solarIntensity += solarIntensities[i];          
         
       }
 
@@ -150,8 +178,14 @@ void loop() {
       bme.takeForcedMeasurement();
   
       LoRa.beginPacket();
-    
-      LoRa.print("MET D");
+
+      #if DEBUG == 1
+        LoRa.print("DBG");
+      #else
+        LoRa.print("MET");
+      #endif    
+
+      LoRa.print(" D");
       LoRa.print(windDir * 22.5, 0);
       LoRa.print(" S");
       LoRa.print(windSpeed * WIND_MULTIPLIER / TRANSMIT_INTERVAL, 2);
@@ -159,12 +193,16 @@ void loop() {
       LoRa.print(windGust * WIND_MULTIPLIER / SAMPLE_INTERVAL, 2);
       LoRa.print(" R");
       LoRa.print(rainClicks * RAIN_MULTIPLIER, 2);
+      rainClicks = 0;
       LoRa.print(" T");
       LoRa.print(bme.readTemperature(), 2);
       LoRa.print(" H");
       LoRa.print(bme.readHumidity(), 2);
       LoRa.print(" P");
       LoRa.print(bme.readPressure() / 100.0, 2);
+      LoRa.print(" I");
+      LoRa.print(solarIntensity * SOLAR_MULTIPLIER / NUM_SAMPLES, 2);
+      
       LoRa.print(" B");
       LoRa.print(analogRead(A7) * (6.6 / 1024), 2);
 
@@ -177,16 +215,16 @@ void loop() {
       }
   
       LoRa.sleep();
-
-      rainClicks = 0;
       
     }
     
   }
 
-  SysTick->CTRL &= ~SysTick_CTRL_TICKINT_Msk;
-  rtc.standbyMode();
-  SysTick->CTRL |= SysTick_CTRL_TICKINT_Msk;
+  //#if DEBUG != 1
+    SysTick->CTRL &= ~SysTick_CTRL_TICKINT_Msk;
+    rtc.standbyMode();
+    SysTick->CTRL |= SysTick_CTRL_TICKINT_Msk;
+  //#endif
   
 }
 
