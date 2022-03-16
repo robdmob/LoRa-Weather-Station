@@ -168,7 +168,7 @@ void loop() {
         
       }
 
-      if (solarIntensity > 600) solarIntensity = 0;
+      if (solarIntensity > 60000) solarIntensity = 0;
 
       windDir /= NUM_SAMPLES;
 
