@@ -15,8 +15,6 @@
 
 #define SCTRL_PIN 10
 #define SVOLT_PIN A1
-#define SRESISTOR 5 + 2 // OHMS
-#define SSIZE 0.005 // M^2
 
 #if DEBUG == 1
   #define SAMPLE_INTERVAL 5
@@ -30,9 +28,7 @@
 
 #define WIND_MULTIPLIER 1.492   // MPH
 #define RAIN_MULTIPLIER 0.2794  // MM
-//#define SOLAR_MULTIPLIER 3.3 / 1024 // VOLTS
-#define SOLAR_MULTIPLIER 3300.0 / 1024 // MILLIVOLTS
-//#define SOLAR_MULTIPLIER 3.3 / 1024 // VOLTS
+#define SOLAR_MULTIPLIER (3300.0 / 1024.0) // MILLIVOLTS
 
 RTCZero rtc;
 
@@ -135,8 +131,10 @@ void loop() {
 
     digitalWrite(SCTRL_PIN, HIGH);
     delayMicroseconds(50);
-    solarIntensities[currSample] = analogRead(SVOLT_PIN);
+    solarIntensities[currSample] = analogRead(SVOLT_PIN) - 6;
     digitalWrite(SCTRL_PIN, LOW);
+
+    
     
     currSample++;
 
@@ -170,6 +168,8 @@ void loop() {
         
       }
 
+      if (solarIntensity > 600) solarIntensity = 0;
+
       windDir /= NUM_SAMPLES;
 
       if (windDir > 15) windDir -= 16;
@@ -202,9 +202,8 @@ void loop() {
       LoRa.print(bme.readPressure() / 100.0, 2);
       LoRa.print(" I");
       LoRa.print(solarIntensity * SOLAR_MULTIPLIER / NUM_SAMPLES, 2);
-      
       LoRa.print(" B");
-      LoRa.print(analogRead(A7) * (6.6 / 1024), 2);
+      LoRa.print(analogRead(A7) * (6.6 / 1024.0), 2);
 
       for (int i=0;i<10;i++) {
         if (LoRa.rssi() < -80) {
