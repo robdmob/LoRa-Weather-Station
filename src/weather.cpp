@@ -1,3 +1,5 @@
+#include <Arduino.h>
+
 #include <RTCZero.h>
 #include <SPI.h>
 #include <Wire.h>
@@ -134,8 +136,6 @@ void loop() {
     solarIntensities[currSample] = analogRead(SVOLT_PIN) - 6;
     digitalWrite(SCTRL_PIN, LOW);
 
-    
-    
     currSample++;
 
     if (currSample >= NUM_SAMPLES) {
