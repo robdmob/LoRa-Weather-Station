@@ -4,7 +4,8 @@
 #include <SPI.h>
 #include <Wire.h>
 #include <LoRa.h>
-
+#include <OneWire.h>
+#include <DallasTemperature.h>
 #include <Adafruit_Sensor.h>
 #include <Adafruit_BME280.h>
 
@@ -17,6 +18,13 @@
 
 #define SCTRL_PIN 10
 #define SVOLT_PIN A1
+
+#define UVCTRL_PIN 11
+#define UVVOLT_PIN A2
+
+#define TEMP_PIN 12
+
+#define GND_REF A5
 
 #if DEBUG == 1
   #define SAMPLE_INTERVAL 5
@@ -31,15 +39,20 @@
 #define WIND_MULTIPLIER 1.492   // MPH
 #define RAIN_MULTIPLIER 0.2794  // MM
 #define SOLAR_MULTIPLIER (3300.0 / 1024.0) // MILLIVOLTS
+#define UV_MULTIPLIER (3.3 / 1024.0) // VOLTS
 
 RTCZero rtc;
 
 Adafruit_BME280 bme;
 
+OneWire oneWire(TEMP_PIN);
+DallasTemperature tempSensors(&oneWire);
+
 uint16_t windSpeeds[NUM_SAMPLES];
 uint8_t windDirs[NUM_SAMPLES];
 
 uint16_t solarIntensities[NUM_SAMPLES];
+uint16_t uvIntensities[NUM_SAMPLES];
 
 volatile bool sample = false;
 uint8_t currSample = 0;
@@ -96,12 +109,17 @@ void setup() {
 
   pinMode(SCTRL_PIN, OUTPUT);
   digitalWrite(SCTRL_PIN, LOW);
+
+  pinMode(UVCTRL_PIN, OUTPUT);
+  digitalWrite(UVCTRL_PIN, LOW);
   
   pinMode(RAIN_PIN, INPUT_PULLUP);
   pinMode(WSPEED_PIN, INPUT_PULLUP);
 
   bme.begin(0x76, &Wire);
   bme.setSampling(Adafruit_BME280::MODE_FORCED, Adafruit_BME280::SAMPLING_X1, Adafruit_BME280::SAMPLING_X1, Adafruit_BME280::SAMPLING_X1, Adafruit_BME280::FILTER_OFF);
+
+  tempSensors.begin();
 
   rtc.begin();
   rtc.setTime(0,0,0);
@@ -125,6 +143,8 @@ void loop() {
   if (sample) {
 
     sample = false;
+
+    digitalWrite(UVCTRL_PIN, HIGH);
     
     windSpeeds[currSample] = windClicks;
     windClicks = 0;
@@ -132,9 +152,14 @@ void loop() {
     windDirs[currSample] = get_wind_direction();
 
     digitalWrite(SCTRL_PIN, HIGH);
-    delayMicroseconds(50);
-    solarIntensities[currSample] = analogRead(SVOLT_PIN) - 6;
+    delayMicroseconds(100);
+    uint16_t solar = analogRead(SVOLT_PIN);
     digitalWrite(SCTRL_PIN, LOW);
+    if (solar < 6) solar = 0;
+    solarIntensities[currSample] = solar;
+
+    uvIntensities[currSample] = analogRead(UVVOLT_PIN);
+    digitalWrite(UVCTRL_PIN, LOW);
 
     currSample++;
 
@@ -148,6 +173,7 @@ void loop() {
       uint16_t windSpeed = windSpeeds[0];
       uint16_t windGust = windSpeeds[0];
       uint16_t solarIntensity = solarIntensities[0];
+      uint16_t uvIntensity = uvIntensities[0];
 
       for (uint8_t i = 1; i < NUM_SAMPLES; i++) {
 
@@ -165,10 +191,9 @@ void loop() {
         if (windSpeeds[i] > windGust) windGust = windSpeeds[i];
         windSpeed += windSpeeds[i];
         solarIntensity += solarIntensities[i];          
-        
-      }
+        uvIntensity += uvIntensities[i];
 
-      if (solarIntensity > 60000) solarIntensity = 0;
+      }
 
       windDir /= NUM_SAMPLES;
 
@@ -176,8 +201,12 @@ void loop() {
       if (windDir < 0) windDir += 16;
 
       bme.takeForcedMeasurement();
+
+      tempSensors.requestTemperatures();
   
       LoRa.beginPacket();
+
+      digitalWrite(UVCTRL_PIN, HIGH);
 
       #if DEBUG == 1
         LoRa.print("DBG");
@@ -196,14 +225,20 @@ void loop() {
       rainClicks = 0;
       LoRa.print(" T");
       LoRa.print(bme.readTemperature(), 2);
+      LoRa.print(" E");
+      LoRa.print(tempSensors.getTempCByIndex(0));
       LoRa.print(" H");
       LoRa.print(bme.readHumidity(), 2);
       LoRa.print(" P");
       LoRa.print(bme.readPressure() / 100.0, 2);
       LoRa.print(" I");
       LoRa.print(solarIntensity * SOLAR_MULTIPLIER / NUM_SAMPLES, 2);
+      LoRa.print(" U");
+      LoRa.print(uvIntensity * UV_MULTIPLIER / NUM_SAMPLES, 2);
       LoRa.print(" B");
       LoRa.print(analogRead(A7) * (6.6 / 1024.0), 2);
+
+      digitalWrite(UVCTRL_PIN, LOW);
 
       for (int i=0;i<10;i++) {
         if (LoRa.rssi() < -80) {
