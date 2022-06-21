@@ -12,18 +12,13 @@
 #define DEBUG 0
 
 #define RAIN_PIN 5
-
 #define WSPEED_PIN 6
 #define WDIR_PIN A0
-
 #define SCTRL_PIN 10
 #define SVOLT_PIN A1
-
 #define UVCTRL_PIN 11
 #define UVVOLT_PIN A2
-
 #define TEMP_PIN 12
-
 #define GND_REF A5
 
 #if DEBUG == 1
@@ -143,18 +138,20 @@ void loop() {
   if (sample) {
 
     sample = false;
-
-    digitalWrite(UVCTRL_PIN, HIGH);
     
     windSpeeds[currSample] = windClicks;
     windClicks = 0;
     
     windDirs[currSample] = get_wind_direction();
 
+    digitalWrite(UVCTRL_PIN, HIGH);
     digitalWrite(SCTRL_PIN, HIGH);
-    delayMicroseconds(100);
+
+    delay(10);
+
     uint16_t solar = analogRead(SVOLT_PIN);
     digitalWrite(SCTRL_PIN, LOW);
+
     if (solar < 6) solar = 0;
     solarIntensities[currSample] = solar;
 
@@ -202,11 +199,20 @@ void loop() {
 
       bme.takeForcedMeasurement();
 
+      float humidity = bme.readHumidity();
+      float pressure = bme.readPressure();
+
+      if ((humidity == NAN) || (pressure == NAN)) {
+        bme.init();
+        bme.setSampling(Adafruit_BME280::MODE_FORCED, Adafruit_BME280::SAMPLING_X1, Adafruit_BME280::SAMPLING_X1, Adafruit_BME280::SAMPLING_X1, Adafruit_BME280::FILTER_OFF);
+        bme.takeForcedMeasurement();
+        humidity = bme.readHumidity();
+        pressure = bme.readPressure();
+      }
+
       tempSensors.requestTemperatures();
   
       LoRa.beginPacket();
-
-      digitalWrite(UVCTRL_PIN, HIGH);
 
       #if DEBUG == 1
         LoRa.print("DBG");
@@ -217,28 +223,26 @@ void loop() {
       LoRa.print(" D");
       LoRa.print(windDir * 22.5, 0);
       LoRa.print(" S");
-      LoRa.print(windSpeed * WIND_MULTIPLIER / TRANSMIT_INTERVAL, 2);
+      LoRa.print(windSpeed * WIND_MULTIPLIER / TRANSMIT_INTERVAL, 1);
       LoRa.print(" G");
-      LoRa.print(windGust * WIND_MULTIPLIER / SAMPLE_INTERVAL, 2);
+      LoRa.print(windGust * WIND_MULTIPLIER / SAMPLE_INTERVAL, 1);
       LoRa.print(" R");
       LoRa.print(rainClicks * RAIN_MULTIPLIER, 2);
       rainClicks = 0;
       LoRa.print(" T");
-      LoRa.print(bme.readTemperature(), 2);
+      LoRa.print(tempSensors.getTempCByIndex(0), 1);
       LoRa.print(" E");
-      LoRa.print(tempSensors.getTempCByIndex(0));
+      LoRa.print(tempSensors.getTempCByIndex(1), 1);
       LoRa.print(" H");
-      LoRa.print(bme.readHumidity(), 2);
+      LoRa.print(humidity, 0);
       LoRa.print(" P");
-      LoRa.print(bme.readPressure() / 100.0, 2);
+      LoRa.print(pressure / 100.0, 2);
       LoRa.print(" I");
-      LoRa.print(solarIntensity * SOLAR_MULTIPLIER / NUM_SAMPLES, 2);
+      LoRa.print(solarIntensity * SOLAR_MULTIPLIER / NUM_SAMPLES, 1);
       LoRa.print(" U");
-      LoRa.print(uvIntensity * UV_MULTIPLIER / NUM_SAMPLES, 2);
+      LoRa.print(((uvIntensity * UV_MULTIPLIER / NUM_SAMPLES) - 0.99) * 8.3, 1);
       LoRa.print(" B");
-      LoRa.print(analogRead(A7) * (6.6 / 1024.0), 2);
-
-      digitalWrite(UVCTRL_PIN, LOW);
+      LoRa.print(analogRead(A7) * (6.6 / 1024.0), 1);
 
       for (int i=0;i<10;i++) {
         if (LoRa.rssi() < -80) {
@@ -254,11 +258,11 @@ void loop() {
     
   }
 
-  //#if DEBUG != 1
+  #if DEBUG != 1
     SysTick->CTRL &= ~SysTick_CTRL_TICKINT_Msk;
     rtc.standbyMode();
     SysTick->CTRL |= SysTick_CTRL_TICKINT_Msk;
-  //#endif
+  #endif
   
 }
 
