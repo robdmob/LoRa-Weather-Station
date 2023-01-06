@@ -6,8 +6,8 @@
 #include <LoRa.h>
 #include <OneWire.h>
 #include <DallasTemperature.h>
-#include <Adafruit_Sensor.h>
-#include <Adafruit_BME280.h>
+#include <DFRobot_AHT20.h>
+#include <DFRobot_BMP280.h>
 
 #define DEBUG 0
 
@@ -38,7 +38,8 @@
 
 RTCZero rtc;
 
-Adafruit_BME280 bme;
+DFRobot_AHT20 aht20;
+DFRobot_BMP280_IIC bmp(&Wire, DFRobot_BMP280_IIC::eSdoLow);
 
 OneWire oneWire(TEMP_PIN);
 DallasTemperature tempSensors(&oneWire);
@@ -111,10 +112,16 @@ void setup() {
   pinMode(RAIN_PIN, INPUT_PULLUP);
   pinMode(WSPEED_PIN, INPUT_PULLUP);
 
-  bme.begin(0x76, &Wire);
-  bme.setSampling(Adafruit_BME280::MODE_FORCED, Adafruit_BME280::SAMPLING_X1, Adafruit_BME280::SAMPLING_X1, Adafruit_BME280::SAMPLING_X1, Adafruit_BME280::FILTER_OFF);
+  bmp.reset();
+  bmp.begin();
+  bmp.setCtrlMeasMode(DFRobot_BMP280_IIC::eCtrlMeasModeForced);
+  
+  aht20.reset();
+  aht20.begin();
+  aht20.startMeasurementReady(true);
 
   tempSensors.begin();
+  tempSensors.requestTemperatures();
 
   rtc.begin();
   rtc.setTime(0,0,0);
@@ -172,6 +179,10 @@ void loop() {
       uint16_t solarIntensity = solarIntensities[0];
       uint16_t uvIntensity = uvIntensities[0];
 
+      bmp.setCtrlMeasMode(DFRobot_BMP280_IIC::eCtrlMeasModeForced);
+      aht20.startMeasurementReady(true);
+      tempSensors.requestTemperatures();
+
       for (uint8_t i = 1; i < NUM_SAMPLES; i++) {
 
         int8_t delta = windDirs[i] - D;
@@ -196,21 +207,6 @@ void loop() {
 
       if (windDir > 15) windDir -= 16;
       if (windDir < 0) windDir += 16;
-
-      bme.takeForcedMeasurement();
-
-      float humidity = bme.readHumidity();
-      float pressure = bme.readPressure();
-
-      if ((humidity == NAN) || (pressure == NAN)) {
-        bme.init();
-        bme.setSampling(Adafruit_BME280::MODE_FORCED, Adafruit_BME280::SAMPLING_X1, Adafruit_BME280::SAMPLING_X1, Adafruit_BME280::SAMPLING_X1, Adafruit_BME280::FILTER_OFF);
-        bme.takeForcedMeasurement();
-        humidity = bme.readHumidity();
-        pressure = bme.readPressure();
-      }
-
-      tempSensors.requestTemperatures();
   
       LoRa.beginPacket();
 
@@ -234,13 +230,13 @@ void loop() {
       LoRa.print(" E");
       LoRa.print(tempSensors.getTempCByIndex(1), 1);
       LoRa.print(" H");
-      LoRa.print(humidity, 0);
+      LoRa.print(aht20.getHumidity_RH(), 0);
       LoRa.print(" P");
-      LoRa.print(pressure / 100.0, 2);
+      LoRa.print(bmp.getPressure() / 100.0, 2);
       LoRa.print(" I");
       LoRa.print(solarIntensity * SOLAR_MULTIPLIER / NUM_SAMPLES, 1);
       LoRa.print(" U");
-      LoRa.print(((uvIntensity * UV_MULTIPLIER / NUM_SAMPLES) - 0.99) * 8.3, 1);
+      LoRa.print(((uvIntensity * UV_MULTIPLIER / NUM_SAMPLES) - 0.99) * 11.6, 1);
       LoRa.print(" B");
       LoRa.print(analogRead(A7) * (6.6 / 1024.0), 1);
 
