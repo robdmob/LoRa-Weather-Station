@@ -1,9 +1,14 @@
 # Weather-Station
 
-Weather station with LoRa upload for the Adafruit Feather M0.
+Weather station for the Adafruit Feather M0 with LoRa Radio.
+
+Sensors used:
 
 Wind speed, direction and rainfall measured using the DFRobot weather station kit.
 
-Temperature, pressure and humidity measured using a BME280 sensor.
+Temperature - 2 x DS18B20
+Humidity - AHT20
+Pressure - BMP280
+UV index - ML851
 
-Solar irradiance measurement and battery charging both provided by a solar panel.
+Solar irradiance measurement and battery charging both provided by a single solar panel.
